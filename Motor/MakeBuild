@@ -1,0 +1,3 @@
+#++ -O2 -Wall exampleGPIOApp.cpp jetsonGPIO.c -o exampleGPIOApp
+#g++ motor_control.cpp ./JHLidarLite_V2/src/lidarlite.cpp ./GPIO/jetsonGPIO/jetsonGPIO.c -I ./JHLidarLite_V2/src/ -o motor_control
+g++ motor_control.cpp ./JHLidarLite_V2/src/lidarlite.cpp ./GPIO/jetsonGPIO/jetsonGPIO.c ./PWM/jetsonPWM.c  -I ./JHLidarLite_V2/src/ -I ./GPIO/jetsonGPIO/ -o motor_control -lpthread
