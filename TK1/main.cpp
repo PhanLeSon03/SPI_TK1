@@ -10,15 +10,25 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <linux/spi/spidev.h>
+#include <pthread.h>
+#include <time.h>
+#include <termios.h>
 
 #include <memory.h>
 #include <getopt.h>
 //https://github.com/NeuroRoboticTech/JetduinoDrivers.git
 #include "SimpleGPIO.h"
-#define CS_SOFTWARE_CONTROL 1
+
+
+
+#define CS_SOFTWARE_CONTROL 0
 #define BUFF_SIZE 20
-#define SPI_SPEED 6000000
+#define SPI_SPEED 1125000
+
+const char *byte_to_binary(int x);
+
 int devHandle;
+char stKeyPrss, stKeyPrssOld;
 unsigned char inBuff[BUFF_SIZE];
 unsigned char outBuff[BUFF_SIZE];
 
@@ -103,13 +113,72 @@ void SPI_Send(int dev, unsigned char *Data,unsigned char *Rev, int len)
     for (int iBuff = 0; iBuff < len; iBuff++)
     {
        Rev[iBuff] = rxBuff[iBuff];
-       printf(" %02d", Rev[iBuff]);
+       ////printf(" %.2x", Rev[iBuff]);
+       printf(" %s", byte_to_binary(Rev[iBuff]));
     }
     printf("\n");
+}
+
+int getkey() 
+{
+	
+    int character;
+    struct termios orig_term_attr;
+    struct termios new_term_attr;
+
+    /* set the terminal to raw mode */
+    tcgetattr(fileno(stdin), &orig_term_attr);
+    memcpy(&new_term_attr, &orig_term_attr, sizeof(struct termios));
+    new_term_attr.c_lflag &= ~(ECHO|ICANON);
+    new_term_attr.c_cc[VTIME] = 0;
+    new_term_attr.c_cc[VMIN] = 0;
+    tcsetattr(fileno(stdin), TCSANOW, &new_term_attr);
+
+    /* read a character from the stdin stream without blocking */
+    /*   returns EOF (-1) if no character is available */
+    //rewind( stdin );
+    //fflush(stdin);
+    character = fgetc(stdin);
+
+    /* restore the original terminal attributes */
+    tcsetattr(fileno(stdin), TCSANOW, &orig_term_attr);
+
+    return character;
+}
+
+void * Key_Read(void *x_void_ptr)
+{
+	char *x_ptr = (char *)x_void_ptr;
+	
+	while (*x_ptr!=27)
+	{
+		*x_ptr = getkey();
+                 //rewind(stdin);
+                 //fflush(stdin);
+	    //printf("Key Press: %d\n",*x_ptr);
+	    usleep(20000);
+	}
+	
+	return NULL;
+}
+
+const char *byte_to_binary(int x)
+{
+    static char b[9];
+    b[0] = '\0';
+
+    int z;
+    for (z = 128; z > 0; z >>= 1)
+    {
+        strcat(b, ((x & z) == z) ? "1" : "0");
+    }
+
+    return b;
 }
         
 int main (void)
 {
+    pthread_t Key_Thread;
     printf("Testing SPI on TK1 \n");
 
 #if CS_SOFTWARE_CONTROL==1
@@ -139,20 +208,59 @@ int main (void)
     }
 
     dumpstat("spidev0.0",devHandle);
-#if CS_SOFTWARE_CONTROL==1
-    //Lower chip select
-    gpio_set_value(57, false);
-#endif
 
-    //SPI_Send(devHandle, outBuff, inBuff, 20);
-    for (int i=0; i< BUFF_SIZE; i++)
-    {
-        write(devHandle, outBuff+i, 1);
+	if(pthread_create(&Key_Thread, NULL, Key_Read, (void *)&stKeyPrss)) 
+	{
+        fprintf(stderr, "Error creating thread\n");
+        return 1;
     }
+    
+    printf("Press ESC for escape\r\n");
+    printf("Press 's' for sending data\r\n");
+
+	// 27 is the ESC key
+	while (stKeyPrss!=27)
+	{
+       if ((stKeyPrss==115)) // s press
+	   {
+           
+           printf("Sending data to SPI1 bus... \r\n");
 #if CS_SOFTWARE_CONTROL==1
-    //Raise chip select again
-    gpio_set_value(57, true);
+           //Lower chip select
+           gpio_set_value(57, false);
 #endif
+           SPI_Send(devHandle, outBuff, inBuff, BUFF_SIZE);
+           for (int i=0; i< BUFF_SIZE; i++)
+           {
+              //write(devHandle, outBuff + i, 1);
+              //read(devHandle,inBuff + i,1);
+              //printf(" %s", byte_to_binary(inBuff[i]));
+              //usleep(100);         // on for 100us
+           }
+           printf("\r\n");
+
+#if CS_SOFTWARE_CONTROL==1
+          //Raise chip select again
+          gpio_set_value(57, true);
+#endif 
+           usleep(10000); 
+	   }
+       else
+       {
+           if (0&&(stKeyPrssOld!=stKeyPrss)&&(stKeyPrss!=0)&&(stKeyPrss!=0xFF))
+           {
+               write(devHandle, &stKeyPrss, 1); 
+               //usleep(1000);
+           } 
+           else 
+           {
+               ;
+           }
+       }
+
+       stKeyPrssOld = stKeyPrss;
+    }
+
 
     close(devHandle);
 

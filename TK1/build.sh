@@ -1,2 +1,1 @@
-g++ -o test main.cpp SimpleGPIO.cpp
-
+g++ -o test main.cpp SimpleGPIO.cpp -lpthread
