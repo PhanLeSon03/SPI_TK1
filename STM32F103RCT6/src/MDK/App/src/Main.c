@@ -28,6 +28,8 @@
 #include "ADC.h"
 #include "stm32f10x_conf.h"
 
+#define BUF_SIZE 20
+
       
 __O u8 TimingDebounce;
 static __O u32 TimingDelay;
@@ -40,6 +42,9 @@ extern GPSPositionStruture GPSPosition;
 extern __O float GPSSpeed;
 extern u8 GPSTxBuffer[GPS_BUFFER_SIZE], GPSRxBuffer[GPS_BUFFER_SIZE];
 extern uint8_t ByteSend2SPI, ByteReceive_SPI ,WaitSPI_Flag, Bsp_flgReceive;
+extern __IO uint16_t RxIdx;
+extern uint8_t SPI_SLAVE_Buffer_Rx[100];
+
 
 BLOWFISH_CTX ctx;
 extern void extFlashLoader(void);
@@ -65,7 +70,7 @@ void TIMER2_Configuration(void);
 static void InterruptConfig(void);
 
 //uint32_t AlternateLanguage= EXT_FLASH_FILE_ADDR;
-uint8_t RxBuf[20];
+uint8_t RxBuf[50];
 
 
 
@@ -92,7 +97,7 @@ int main( void )
 
 	// Initialize serial flash
 	///SPI_FlashInf_Init();
-    bspSPI_Init();
+    
     
     //Initial I2C is used for Accelerometer
 	////I2CInit();
@@ -116,10 +121,12 @@ int main( void )
 	// Initial GPS
 	GPS_Init(); //USART 1 initialization
 
+    bspSPI1_Init();
+
     // Initial GSM
     //GSM_Init();
 
-	tmDelayms(1000);
+	//tmDelayms(1000);
 	
 	//GPIO_SetBits(GPIOC,GPIO_Pin_8);              //PC8 : GSM_LED --> LED 2
 	/*
@@ -149,30 +156,41 @@ int main( void )
 		////Delay1h();
         stBttn = GPIO_ReadInputDataBit(GPIOC,GPIO_Pin_13); 
 
-		//if ((stBttn==Bit_RESET)&&(stBttnOld==Bit_SET))
+		if ((stBttn==Bit_RESET)&&(stBttnOld==Bit_SET))
+        {
+        //    bspSPI_SendByte(0x0F);
+        }
         if (1)
         {
 		    ////for (int i=0;i <5;i++)
             ////{      
             ////    ReceiveByte = bspSPI_SendByte(atr[i]);
+            ////    while(!USART_GetFlagStatus(USART1,USART_FLAG_TXE))
+            ////     {
+            ////
+            ////    }
             ////    USART_SendData(USART1, ReceiveByte);
             ////}
-            sprintf(buffer,"SPI Test\r\n");
-            for (uint16_t i =0; i < 10 ;i++)
-            {
-                while(!USART_GetFlagStatus(USART1,USART_FLAG_TXE))
-                {
+            //sprintf(buffer,"SPI Test\r\n");
+            //for (uint16_t i =0; i < 10 ;i++)
+            //{
+            //    while(!USART_GetFlagStatus(USART1,USART_FLAG_TXE))
+            //    {
 
-                }
-                USART_SendData(USART1, buffer[i]); 
-            }
-		    GPIO_SetBits(GPIOC,GPIO_Pin_7);
-		    GPIO_SetBits(GPIOC,GPIO_Pin_12);
-		    tmDelayms(100);
+            //    }
+            //    USART_SendData(USART1, buffer[i]); 
+            //}
+		    ///////GPIO_SetBits(GPIOC,GPIO_Pin_7);
+		    ///////GPIO_SetBits(GPIOC,GPIO_Pin_12);
+		    ///////tmDelayms(100);
 
-            status = SPI2_Receive(RxBuf, 20 , 80000);
-            if (status)
+            //status = SPI1_Receive(RxBuf, BUF_SIZE , 80000);
+           
+            if (WaitSPI_Flag==1)
             {
+                WaitSPI_Flag = 0;
+                /* Disable SPI1  */
+	            SPI_Cmd(SPI1, DISABLE);	
                 sprintf(buffer,"\nSPI Data:");
                 for (uint16_t i =0; i < 10 ;i++)
                 {
@@ -183,25 +201,30 @@ int main( void )
                     USART_SendData(USART1, buffer[i]); 
                 }
 
-                for (uint16_t i =0; i < 20 ;i++)
+                for (uint16_t i =0; i < BUF_SIZE  ;i++)
                 {
                     while(!USART_GetFlagStatus(USART1,USART_FLAG_TXE))
                     {
 
                     }
-                    USART_SendData(USART1, RxBuf[i]); 
+                    USART_SendData(USART1, SPI_SLAVE_Buffer_Rx[i]); 
                 }
-            }
-            while(!USART_GetFlagStatus(USART1,USART_FLAG_TXE))
-            {
+                
+                while(!USART_GetFlagStatus(USART1,USART_FLAG_TXE))
+                {
 
+                }
+                USART_SendData(USART1, '\n');
+                
+                /* Enable SPI1  */
+	            SPI_Cmd(SPI1, ENABLE);	
             }
-            USART_SendData(USART1, '\n'); 
+ 
 		}
         else
         {	
-            GPIO_ResetBits(GPIOC,GPIO_Pin_7);            //PC7  : LED1 
-            GPIO_ResetBits(GPIOC,GPIO_Pin_12);           //PC12: LED2
+            //////GPIO_ResetBits(GPIOC,GPIO_Pin_7);            //PC7  : LED1 
+            //////GPIO_ResetBits(GPIOC,GPIO_Pin_12);           //PC12: LED2
 		    //SPI2 sending here    
 		}
         
@@ -302,8 +325,8 @@ void assert_failed(uint8_t* file, uint32_t line)
 #endif
 void RCC_Configuration(void)
 {
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1 | RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOC | RCC_APB2Periph_AFIO, ENABLE);
-	RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2 | RCC_APB1Periph_TIM2, ENABLE);
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1|RCC_APB2Periph_SPI1| RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOC | RCC_APB2Periph_AFIO, ENABLE);
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2 |RCC_APB1Periph_SPI2| RCC_APB1Periph_TIM2, ENABLE);
 }
 
 void NVIC_Configuration_GPS(void)

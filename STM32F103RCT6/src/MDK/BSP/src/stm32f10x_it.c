@@ -720,31 +720,9 @@ void I2C1_ER_IRQHandler(void)
 //{
 //}
 
-/*******************************************************************************
-* Function Name  	: SPI1_IRQHandler
-* Return         	: None
-* Parameters 		: None
-* Created by		: Phung The Vu
-* Date created	: 19/01/2009
-* Description		: This function handles SPI1 global interrupt request.
-* Notes			: 
-*******************************************************************************/
-void SPI1_IRQHandler(void)
-{
-}
 
-/*******************************************************************************
-* Function Name  	: SPI2_IRQHandler
-* Return         	: None
-* Parameters 		: None
-* Created by		: Phung The Vu
-* Date created	: 19/01/2009
-* Description		: This function handles SPI2 global interrupt request.
-* Notes			: 
-*******************************************************************************/
-//void SPI2_IRQHandler(void)
-//{
-//}
+
+
 
 /*******************************************************************************
 * Function Name  	: USART1_IRQHandler

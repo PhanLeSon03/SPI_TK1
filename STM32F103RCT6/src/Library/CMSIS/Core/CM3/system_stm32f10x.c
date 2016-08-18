@@ -163,7 +163,7 @@ static void SetSysClock(void);
   */
 void SystemInit (void)
 {
-#if 0
+#if 1
   /*!< RCC system reset(for debug purpose) */
   /*!< Set HSION bit */
   //HSION:1b:Internal high-speed clock enable:internal 8MHz RC oscillator ON
@@ -174,30 +174,36 @@ void SystemInit (void)
   // PPRE1[2:0]: 000b:APB Low-speed prescaler (APB1): HCLK is not devided
   // PPRE2[2:0]: 000b:APB high-speed prescaler (APB2): HCLK not divideds
   //  MCO[2:0]:  000b:MCO output disabled, no clock on MCO
-  RCC->CFGR &= (uint32_t)0xF0FF0000;
-                  
+  RCC->CFGR &= (uint32_t)0xF8FF0000; 
   /*!< Reset HSEON, CSSON and PLLON bits */
   //HSEON:0b:HSE clock enable: HSE oscillator OFF
   //CSSON:0b:Clock security system enable: Clock detector OFF
   //PLLON:0b:PLL enable:PLL OFF
   RCC->CR &= (uint32_t)0xFEF6FFFF;
   /*!< Reset HSEBYP bit */
-  RCC->CR &= (uint32_t)0xFFFBFFFF;;
-  
-  RCC->CR |= (uint32_t)RCC_CR_HSEON;
+  /*HSEBYP:0b:External high-speed clock bypass:external 4-16MHz 
+  oscillator not bypassed*/
+  RCC->CR &= (uint32_t)0xFFFBFFFF;
   /*!< Reset PLLSRC, PLLXTPRE, PLLMUL[3:0] and USBPRE bits */
+
   //PLLSRC:0b:PLL entry clock source:HSI oscillator clock/2 selected as PLL input clock
   //PLLXTPRE:0b:HSE divider for PLL entry:HSE clock not divided
   //PLLMUL:0000b:PLL multiplication factor:PLL input clock x2
   //USBPRE:0b:USB prescaler: PLL clock is divided by 1.5
   RCC->CFGR &= (uint32_t)0xFF80FFFF;
+
   /*!< Disable all interrupts */
+
+  //RCC_CIR:0x00000000: reset value
   RCC->CIR = 0x00000000;
-#endif    
-  SystemClock_HSE(3);
   /*!< Configure the System clock frequency, HCLK, PCLK2 and PCLK1 prescalers */
   /*!< Configure the Flash Latency cycles and enable prefetch buffer */
-  //SetSysClock();
+
+#endif    
+  //SystemClock_HSE(3);
+  /*!< Configure the System clock frequency, HCLK, PCLK2 and PCLK1 prescalers */
+  /*!< Configure the Flash Latency cycles and enable prefetch buffer */
+  SetSysClock();
 
 }
 
