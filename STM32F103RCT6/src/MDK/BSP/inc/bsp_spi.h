@@ -21,6 +21,10 @@
 /* Exported types ------------------------------------------------------------*/
 /* Exported constants --------------------------------------------------------*/
 /* Exported macro ------------------------------------------------------------*/
+#define BUF_SIZE 20
+
+
+
 /* Exported functions ------------------------------------------------------- */
 /* Extern declaration ------------------------------------------------------------*/
 void bspSPI_CS_Low(void);
@@ -33,8 +37,8 @@ uint8_t bspSPI_ReadByte(void);
 //uint8_t bspSPI_SendByte_Son(uint8_t byte);
 uint8_t bspSPI_SendByte(uint8_t byte);
 
-bool SPI2_Receive(uint8_t * RxBuf, uint16_t Len , uint16_t TimeOut);
-bool SPI1_Receive(uint8_t * RxBuf, uint16_t Len , uint16_t TimeOut);
+bool SPI1_Receive(uint8_t * RxBuf_Sub, uint16_t Len , uint16_t TimeOut);
+bool SPI2_Receive(uint8_t * RxBuf_Sub, uint16_t Len , uint16_t TimeOut);
 
 
 #endif /* __BSP_SPI_H */

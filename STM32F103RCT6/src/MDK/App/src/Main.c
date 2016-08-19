@@ -28,12 +28,13 @@
 #include "ADC.h"
 #include "stm32f10x_conf.h"
 
-#define BUF_SIZE 20
 
+#define DEBUG 0
       
 __O u8 TimingDebounce;
 static __O u32 TimingDelay;
 static uint8_t stBttn, stBttnOld;
+static uint8_t stPA0, stPA0Old;
 
 extern uint8_t Request;
 extern char GPSFix;
@@ -55,6 +56,10 @@ void NVIC_Configuration_GPS(void);
 void GPIO_Configuration(void);
 void USART_Configuration(void);
 void TIMER2_Configuration(void);
+void Move_FW(void);
+void Move_BW(void);
+void Stop(void);
+
 
 
 
@@ -70,8 +75,9 @@ void TIMER2_Configuration(void);
 static void InterruptConfig(void);
 
 //uint32_t AlternateLanguage= EXT_FLASH_FILE_ADDR;
-uint8_t RxBuf[50];
-
+uint8_t RxBuf[BUF_SIZE];
+uint8_t RxBuf_Main[BUF_SIZE];
+uint16_t cntRun;
 
 
 int main( void )
@@ -154,7 +160,9 @@ int main( void )
 		////AppendFile("a", EXT_FLASH_FILE_ADDR4,"bat.txt", 1);
 		////AppendFile(buffer, EXT_FLASH_FILE_ADDR4,"bat.txt", 4);
 		////Delay1h();
+
         stBttn = GPIO_ReadInputDataBit(GPIOC,GPIO_Pin_13); 
+        stPA0 = GPIO_ReadInputDataBit(GPIOA,GPIO_Pin_0);
 
 		if ((stBttn==Bit_RESET)&&(stBttnOld==Bit_SET))
         {
@@ -183,14 +191,14 @@ int main( void )
 		    ///////GPIO_SetBits(GPIOC,GPIO_Pin_7);
 		    ///////GPIO_SetBits(GPIOC,GPIO_Pin_12);
 		    ///////tmDelayms(100);
-
-            //status = SPI1_Receive(RxBuf, BUF_SIZE , 80000);
-           
-            if (WaitSPI_Flag==1)
+            RxBuf_Main[0] = 0x00; 
+            status = SPI1_Receive(RxBuf_Main, BUF_SIZE , 100);
+ #if DEBUG          
+            if (status==BUF_SIZE)
             {
-                WaitSPI_Flag = 0;
-                /* Disable SPI1  */
-	            SPI_Cmd(SPI1, DISABLE);	
+                status = 0;
+                
+	            	
                 sprintf(buffer,"\nSPI Data:");
                 for (uint16_t i =0; i < 10 ;i++)
                 {
@@ -207,7 +215,7 @@ int main( void )
                     {
 
                     }
-                    USART_SendData(USART1, SPI_SLAVE_Buffer_Rx[i]); 
+                    USART_SendData(USART1, RxBuf_Main[i]); 
                 }
                 
                 while(!USART_GetFlagStatus(USART1,USART_FLAG_TXE))
@@ -216,20 +224,65 @@ int main( void )
                 }
                 USART_SendData(USART1, '\n');
                 
-                /* Enable SPI1  */
-	            SPI_Cmd(SPI1, ENABLE);	
+	
             }
- 
+            else if (status!=0)
+            {
+                sprintf(buffer,"\nTime Out:");
+                for (uint16_t i =0; i < 10 ;i++)
+                {
+                    while(!USART_GetFlagStatus(USART1,USART_FLAG_TXE))
+                    {
+
+                    }
+                    USART_SendData(USART1, buffer[i]); 
+                }
+                 for (uint16_t i =0; i < status  ;i++)
+                {
+                    while(!USART_GetFlagStatus(USART1,USART_FLAG_TXE))
+                    {
+
+                    }
+                    USART_SendData(USART1, RxBuf_Main[i]); 
+                }
+
+            }
+            else
+            {
+
+            }   
+#endif
+            if (RxBuf_Main[0] =='i')
+            {
+                Move_FW();
+                cntRun=0;
+            }
+            else if (RxBuf_Main[0] =='k')
+            {
+               Move_BW();
+               cntRun =0;
+            }
+            else
+            {
+                cntRun++;
+                if (cntRun >10)
+                {
+                    Stop();
+                }
+            }
+                
 		}
         else
-        {	
+        {	  
+
             //////GPIO_ResetBits(GPIOC,GPIO_Pin_7);            //PC7  : LED1 
             //////GPIO_ResetBits(GPIOC,GPIO_Pin_12);           //PC12: LED2
 		    //SPI2 sending here    
 		}
         
         stBttnOld = stBttn;
-        tmDelayms(10);
+        stPA0Old = stPA0;
+        //tmDelayms(10);
         //if (Bsp_flgReceive == SET)
         //{
         //    Bsp_flgReceive = RESET;
@@ -325,7 +378,8 @@ void assert_failed(uint8_t* file, uint32_t line)
 #endif
 void RCC_Configuration(void)
 {
-	RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1|RCC_APB2Periph_SPI1| RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOC | RCC_APB2Periph_AFIO, ENABLE);
+	RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1|RCC_APB2Periph_SPI1| RCC_APB2Periph_GPIOA|
+                  RCC_APB2Periph_GPIOB | RCC_APB2Periph_GPIOC | RCC_APB2Periph_AFIO, ENABLE);
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2 |RCC_APB1Periph_SPI2| RCC_APB1Periph_TIM2, ENABLE);
 }
 
@@ -372,7 +426,31 @@ void GPIO_Configuration(void)
 	GPIO_Init(GPIOC, &GPIO_InitStructure);
 	
 	GPIO_EXTILineConfig(GPIO_PortSourceGPIOC, GPIO_PinSource10);
+    
+    //For Moutain Car
+    // PA4 : Enable
+    // PB0 : PWM
+    // PA8 : Direction
 
+    //PA4 
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_4 ;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+	GPIO_Init(GPIOA, &GPIO_InitStructure);
+    
+    //PB0 
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0 ;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+	GPIO_Init(GPIOB, &GPIO_InitStructure);
+    
+    //PA8 
+    GPIO_InitStructure.GPIO_Pin = GPIO_Pin_8 ;
+	GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
+	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+	GPIO_Init(GPIOA, &GPIO_InitStructure);
+    
+    
 	EXTI_InitTypeDef EXTI_InitStructure;
 //	EXTI_StructInit(& EXTI_InitStructure);
 
@@ -382,6 +460,7 @@ void GPIO_Configuration(void)
 	EXTI_InitStructure.EXTI_LineCmd = ENABLE;
 	EXTI_Init(&EXTI_InitStructure);
 }
+
 
 void USART_Configuration(void)
 {
@@ -452,6 +531,42 @@ void TimingDelay_Decrement(void)
 }
 
 
+void Move_FW(void)
+{
+    // go forward
+    GPIO_SetBits(GPIOA,GPIO_Pin_4);
+    GPIO_SetBits(GPIOB,GPIO_Pin_0);
+    GPIO_SetBits(GPIOA,GPIO_Pin_8);
+    ////tmDelayms(300);
+    
+    GPIO_ResetBits(GPIOC,GPIO_Pin_7);            //PC7  : LED1 
+    GPIO_SetBits(GPIOC,GPIO_Pin_12);           //PC12: LED2
 
+
+}
+
+void Move_BW(void)
+{
+    // go backward
+    GPIO_SetBits(GPIOA,GPIO_Pin_4);
+    GPIO_SetBits(GPIOB,GPIO_Pin_0);
+    GPIO_ResetBits(GPIOA,GPIO_Pin_8);
+    ////tmDelayms(300);
+    
+    GPIO_SetBits(GPIOC,GPIO_Pin_7);            //PC7  : LED1 
+    GPIO_ResetBits(GPIOC,GPIO_Pin_12);           //PC12: LED2   
+
+}
+
+void Stop(void)
+{
+    GPIO_ResetBits(GPIOA,GPIO_Pin_4);
+    GPIO_ResetBits(GPIOB,GPIO_Pin_0);
+    GPIO_ResetBits(GPIOA,GPIO_Pin_8);
+    GPIO_SetBits(GPIOC,GPIO_Pin_7);            //PC7  : LED1 
+    GPIO_SetBits(GPIOC,GPIO_Pin_12);           //PC12: LED2
+
+
+}
 
 

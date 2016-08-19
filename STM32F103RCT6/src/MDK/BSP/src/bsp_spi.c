@@ -8,8 +8,9 @@
 uint8_t ByteSend2SPI, ByteReceive_SPI ,WaitSPI_Flag, Bsp_flgReceive;
 __IO uint16_t RxIdx;
 uint8_t SPI_SLAVE_Buffer_Rx[100];
+extern uint8_t RxBuf[BUF_SIZE];
 
-
+uint16_t LenIRQ_SPI; 
 
 /* Private function prototypes -----------------------------------------------*/
  void NVIC_Configuration(void);
@@ -270,16 +271,21 @@ void SPI1_IRQHandler(void)
 	  if (SPI_I2S_GetITStatus(SPI1, SPI_I2S_IT_RXNE) != RESET)
 	  {
         /* Store SPI_SLAVE received data */
-        if (RxIdx < 20)
+        if (RxIdx < LenIRQ_SPI-1)
         {
             SPI_SLAVE_Buffer_Rx[RxIdx++] = SPI_I2S_ReceiveData(SPI1);
         }
         else
         {
-            RxIdx=0;
             SPI_SLAVE_Buffer_Rx[RxIdx] = SPI_I2S_ReceiveData(SPI1);
+            for (uint16_t i=0; i < LenIRQ_SPI; i++)
+            {
+                RxBuf[i] = SPI_SLAVE_Buffer_Rx[i]; 
+            }
+            RxIdx=0;
+            
 			////ByteReceive_SPI = SPI_I2S_ReceiveData(SPI2);
-		////SPI_I2S_ITConfig(SPI2, SPI_I2S_IT_RXNE, DISABLE);
+		    ////SPI_I2S_ITConfig(SPI2, SPI_I2S_IT_RXNE, DISABLE);
 		    WaitSPI_Flag = 1;
         }
         Bsp_flgReceive = SET;
@@ -291,17 +297,19 @@ void SPI1_IRQHandler(void)
 return: True : finished receive
         False: TimeOut 
 */
-bool SPI2_Receive(uint8_t * RxBuf, uint16_t Len , uint16_t TimeOut)
+bool SPI2_Receive(uint8_t * RxBuf_Sub, uint16_t Len , uint16_t TimeOut)
 {
     uint32_t Time=0;
     /* Enable SPI_SLAVE RXNE interrupt */
-    SPI_I2S_ITConfig(SPI2, SPI_I2S_IT_RXNE, ENABLE);
-    SPI_I2S_ITConfig(SPI2, SPI_I2S_IT_TXE, ENABLE);
+    ///////SPI_I2S_ITConfig(SPI2, SPI_I2S_IT_RXNE, ENABLE);
+    ///////SPI_I2S_ITConfig(SPI2, SPI_I2S_IT_TXE, ENABLE);
+
     SPI_Cmd(SPI2, ENABLE);
     RxIdx = 0;
-    
+    LenIRQ_SPI = Len;
+    WaitSPI_Flag = 0;
     /* Transfer procedure */
-    while (RxIdx < Len)
+    while (WaitSPI_Flag ==0)
     {
         //SPI_I2S_ITConfig(SPI2, SPI_I2S_IT_RXNE, ENABLE);
         Time++;
@@ -311,12 +319,16 @@ bool SPI2_Receive(uint8_t * RxBuf, uint16_t Len , uint16_t TimeOut)
         //}
     }
 
-    SPI_I2S_ITConfig(SPI2, SPI_I2S_IT_RXNE, DISABLE);
-    SPI_I2S_ITConfig(SPI2, SPI_I2S_IT_TXE, DISABLE);
+    WaitSPI_Flag =0;
+
+    ////////SPI_I2S_ITConfig(SPI2, SPI_I2S_IT_RXNE, DISABLE);
+    ////////SPI_I2S_ITConfig(SPI2, SPI_I2S_IT_TXE, DISABLE);
+
+
     SPI_Cmd(SPI2, DISABLE);
     for (uint16_t i=0; i < Len; i++)
     {
-        RxBuf[i] = SPI_SLAVE_Buffer_Rx[i]; 
+        RxBuf_Sub[i] = RxBuf[i]; 
     }
     
 
@@ -329,36 +341,47 @@ bool SPI2_Receive(uint8_t * RxBuf, uint16_t Len , uint16_t TimeOut)
 return: True : finished receive
         False: TimeOut 
 */
-bool SPI1_Receive(uint8_t * RxBuf, uint16_t Len , uint16_t TimeOut)
+bool SPI1_Receive(uint8_t * RxBuf_Sub, uint16_t Len , uint16_t TimeOut)
 {
     uint32_t Time=0;
     /* Enable SPI_SLAVE RXNE interrupt */
     //SPI_I2S_ITConfig(SPI1, SPI_I2S_IT_RXNE, ENABLE);
     //SPI_I2S_ITConfig(SPI1, SPI_I2S_IT_TXE, ENABLE);
     //SPI_Cmd(SPI1, ENABLE);
+    SPI_Cmd(SPI1, ENABLE);
     RxIdx = 0;
-    
+    LenIRQ_SPI = Len;
+    WaitSPI_Flag = 0;
     /* Transfer procedure */
-    while (RxIdx < Len)
+    while (WaitSPI_Flag ==0)
     {
         //SPI_I2S_ITConfig(SPI2, SPI_I2S_IT_RXNE, ENABLE);
         Time++;
-        //if (Time > TimeOut*1000)
-        //{
-        //    return 0;
-        //}
+        if (Time > (uint32_t)(TimeOut*1000))
+        {
+            for (uint16_t i=0; i < RxIdx; i++)
+            {
+                RxBuf_Sub[i] = SPI_SLAVE_Buffer_Rx[i];
+                SPI_SLAVE_Buffer_Rx[i] = 0x00;
+            }
+            return RxIdx;
+        }
     }
 
+    
+    WaitSPI_Flag =0;
     //SPI_I2S_ITConfig(SPI1, SPI_I2S_IT_RXNE, DISABLE);
     //SPI_I2S_ITConfig(SPI1, SPI_I2S_IT_TXE, DISABLE);
-    //SPI_Cmd(SPI1, DISABLE);
+    SPI_Cmd(SPI1, DISABLE);
     for (uint16_t i=0; i < Len; i++)
     {
-        RxBuf[i] = SPI_SLAVE_Buffer_Rx[i]; 
+         RxBuf_Sub[i] = RxBuf[i];
+         RxBuf[i] = 0x00;
     }
+
     
 
-    return 1;
+    return Len;
     
 
 }
