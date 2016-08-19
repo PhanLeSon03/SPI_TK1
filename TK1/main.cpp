@@ -191,14 +191,6 @@ int main (void)
     gpio_set_value(57, true);
 #endif
    
-    // Initialize the buffer
-    for (int i=0; i < BUFF_SIZE;i++)
-    {
-        outBuff[i]= 65 + i;
-        inBuff[i] = 0;
-        printf(" %02d", outBuff[i]);
-    }
-    printf("\r\n");
 
     //open device on /dev/spidev0.0
     if ((devHandle = open("/dev/spidev0.0",O_RDWR))<0)
@@ -229,6 +221,16 @@ int main (void)
            //Lower chip select
            gpio_set_value(57, false);
 #endif
+
+           // Initialize the buffer
+           for (int i=0; i < BUFF_SIZE;i++)
+           {
+               outBuff[i]= 65 + i;
+               inBuff[i] = 0;
+               printf(" %02d", outBuff[i]);
+           }
+           printf("\r\n"); 
+
            SPI_Send(devHandle, outBuff, inBuff, BUFF_SIZE);
            for (int i=0; i< BUFF_SIZE; i++)
            {
@@ -247,9 +249,18 @@ int main (void)
 	   }
        else
        {
-           if (0&&(stKeyPrssOld!=stKeyPrss)&&(stKeyPrss!=0)&&(stKeyPrss!=0xFF))
+           if ((stKeyPrssOld!=stKeyPrss)&&(stKeyPrss!=0)&&(stKeyPrss!=0xFF))
            {
-               write(devHandle, &stKeyPrss, 1); 
+                // Initialize the buffer
+                for (int i=0; i < BUFF_SIZE;i++)
+                {
+                    outBuff[i]= stKeyPrss;
+                    inBuff[i] = 0;
+                    printf(" %02d", outBuff[i]);
+                }
+                printf("\r\n");
+
+               SPI_Send(devHandle, outBuff, inBuff, BUFF_SIZE);
                //usleep(1000);
            } 
            else 
